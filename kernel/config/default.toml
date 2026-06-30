@@ -1,10 +1,7 @@
 [serial]
 enabled = true
-port = 1016
-baud = 115200
-irq = 4
 
-[tty]
+[framebuffer]
 font = "assets/fonts/ter-v16n.psf"
 columns = 80
 rows = 25
