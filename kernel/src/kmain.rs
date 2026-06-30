@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 #![feature(abi_x86_interrupt)]
+#![allow(dead_code)]
 
 mod boot;
 mod config;
@@ -18,7 +19,7 @@ pub extern "C" fn _start() -> ! {
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    loop {}
+    krnl::panic_handler::handle(_info)
 }
 
 fn main() -> ! {

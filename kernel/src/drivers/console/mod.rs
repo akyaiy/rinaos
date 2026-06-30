@@ -1,6 +1,7 @@
 mod ansi;
 mod font;
 
+use core::fmt::{self, Write};
 use core::ptr;
 
 use crate::config::CONFIG;
@@ -97,12 +98,47 @@ pub fn write_str(text: &str) {
     }
 }
 
+pub fn _print(args: fmt::Arguments) {
+    if let Some(console) = CONSOLE.lock().as_mut() {
+        let _ = ConsoleWriter(console).write_fmt(args);
+    }
+}
+
 pub fn clear() {
     if let Some(console) = CONSOLE.lock().as_mut() {
         console.hide_cursor();
         console.clear();
         console.show_cursor();
     }
+}
+
+struct ConsoleWriter<'a>(&'a mut Console);
+
+impl Write for ConsoleWriter<'_> {
+    fn write_str(&mut self, text: &str) -> fmt::Result {
+        for byte in text.bytes() {
+            self.0.write_byte(byte);
+        }
+
+        Ok(())
+    }
+}
+
+#[macro_export]
+macro_rules! printf {
+    ($($arg:tt)*) => {
+        $crate::drivers::console::_print(core::format_args!($($arg)*))
+    };
+}
+
+#[macro_export]
+macro_rules! println {
+    () => {
+        $crate::printf!("\n")
+    };
+    ($fmt:literal $(, $($arg:tt)+)?) => {
+        $crate::printf!(concat!($fmt, "\n") $(, $($arg)+)?)
+    };
 }
 
 impl Console {
