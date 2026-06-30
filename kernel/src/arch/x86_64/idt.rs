@@ -66,16 +66,19 @@ extern "x86-interrupt" fn page_fault_handler(
 }
 
 extern "x86-interrupt" fn double_fault_handler(
-    stack_frame: InterruptStackFrame,
-    error_code: u64,
+    _stack_frame: InterruptStackFrame,
+    _error_code: u64,
 ) -> ! {
-    panic!(
-        "EXCEPTION: DOUBLE FAULT\n{:#?}\nerror code: {}",
-        stack_frame, error_code
-    );
+    x86_64::instructions::interrupts::disable();
+
+    loop {
+        x86_64::instructions::hlt();
+    }
 }
 
 extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    interrupts::timer_tick();
+
     unsafe {
         interrupts::eoi(interrupts::TIMER_VECTOR);
     }
@@ -88,6 +91,8 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStac
 }
 
 extern "x86-interrupt" fn local_timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    interrupts::local_timer_tick();
+
     unsafe {
         interrupts::local_timer_eoi();
     }

@@ -33,6 +33,7 @@ const CALIBRATION_PIT_TICKS: u16 = ((PIT_FREQUENCY_HZ * CALIBRATION_MS) / 1000) 
 
 static LAPIC_BASE: AtomicUsize = AtomicUsize::new(0);
 static TIMER_TICKS_PER_MS: AtomicU32 = AtomicU32::new(0);
+static TIMER_INITIAL_COUNT: AtomicU32 = AtomicU32::new(0);
 
 pub unsafe fn init(local_apic_phys: u64, hhdm_offset: u64) {
     let base_phys = if local_apic_phys == 0 {
@@ -83,9 +84,26 @@ pub unsafe fn start_periodic_timer(period_ms: u32) {
     }
 
     let initial_count = ticks_per_ms.saturating_mul(period_ms.max(1));
+    TIMER_INITIAL_COUNT.store(initial_count, Ordering::Release);
     write(REG_TIMER_DIVIDE, TIMER_DIVIDE_BY_16);
     write(REG_LVT_TIMER, TIMER_PERIODIC | LOCAL_TIMER_VECTOR as u32);
     write(REG_TIMER_INITIAL_COUNT, initial_count);
+}
+
+pub fn timer_elapsed_ns() -> u64 {
+    let ticks_per_ms = TIMER_TICKS_PER_MS.load(Ordering::Acquire);
+    let initial_count = TIMER_INITIAL_COUNT.load(Ordering::Acquire);
+
+    if ticks_per_ms == 0 || initial_count == 0 {
+        return 0;
+    }
+
+    let current_count = unsafe { read(REG_TIMER_CURRENT_COUNT) };
+    let elapsed_ticks = initial_count
+        .saturating_sub(current_count)
+        .min(initial_count);
+
+    (elapsed_ticks as u64 * 1_000_000) / ticks_per_ms as u64
 }
 
 unsafe fn pit_wait(ticks: u16) {

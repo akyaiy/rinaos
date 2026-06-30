@@ -1,6 +1,6 @@
 use core::sync::atomic::{AtomicU8, Ordering};
 
-use crate::{boot::BootInfo, println};
+use crate::{boot::BootInfo, krnl::time};
 
 use super::acpi;
 
@@ -17,6 +17,9 @@ pub const SPURIOUS_VECTOR: u8 = 0xff;
 const BACKEND_NONE: u8 = 0;
 const BACKEND_PIC: u8 = 1;
 const BACKEND_APIC: u8 = 2;
+const PIC_TIMER_HZ: u32 = 1_000;
+const LOCAL_TIMER_PERIOD_MS: u32 = 10;
+const NS_PER_MS: u64 = 1_000_000;
 
 static BACKEND: AtomicU8 = AtomicU8::new(BACKEND_NONE);
 
@@ -28,11 +31,35 @@ pub fn init(boot_info: &BootInfo) {
     } else {
         unsafe {
             pic::init();
+            let period_ns = pic::init_pit_timer(PIC_TIMER_HZ);
+            time::set_pic_timer_period_ns(period_ns);
             pic::enable_irq(0);
             pic::enable_irq(1);
         }
         BACKEND.store(BACKEND_PIC, Ordering::Release);
-        println!("interrupts: using legacy PIC fallback");
+        crate::klog_info!(
+            "interrupts: using legacy PIC fallback, PIT {} Hz",
+            PIC_TIMER_HZ
+        );
+    }
+}
+
+pub fn timer_tick() {
+    if BACKEND.load(Ordering::Acquire) == BACKEND_PIC {
+        time::tick_pic_timer();
+    }
+}
+
+pub fn local_timer_tick() {
+    if BACKEND.load(Ordering::Acquire) == BACKEND_APIC {
+        time::tick_local_timer();
+    }
+}
+
+pub fn timer_offset_ns() -> u64 {
+    match BACKEND.load(Ordering::Acquire) {
+        BACKEND_APIC => lapic::timer_elapsed_ns(),
+        _ => 0,
     }
 }
 
@@ -77,14 +104,16 @@ unsafe fn init_apic(boot_info: &BootInfo) -> bool {
 
     match lapic::calibrate_timer() {
         Some(ticks_per_ms) => {
-            lapic::start_periodic_timer(10);
-            println!(
-                "interrupts: using APIC, lapic timer {} ticks/ms",
-                ticks_per_ms
+            lapic::start_periodic_timer(LOCAL_TIMER_PERIOD_MS);
+            time::set_local_timer_period_ns(LOCAL_TIMER_PERIOD_MS as u64 * NS_PER_MS);
+            crate::klog_info!(
+                "interrupts: using APIC, lapic timer {} ticks/ms, period {} ms",
+                ticks_per_ms,
+                LOCAL_TIMER_PERIOD_MS
             );
         }
         None => {
-            println!("interrupts: using APIC, lapic timer calibration failed");
+            crate::klog_warn!("interrupts: using APIC, lapic timer calibration failed");
         }
     }
 

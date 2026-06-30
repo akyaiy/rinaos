@@ -8,3 +8,7 @@ pub fn init(boot_info: &crate::boot::BootInfo) {
     idt::init();
     interrupts::init(boot_info);
 }
+
+pub fn timer_offset_ns() -> u64 {
+    interrupts::timer_offset_ns()
+}

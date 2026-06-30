@@ -4,6 +4,7 @@ pub struct BootInfo {
     pub memory_map: &'static [MemoryRegion],
     pub hhdm_offset: u64,
     pub rsdp_addr: Option<u64>,
+    pub cmdline: &'static str,
 }
 
 #[derive(Clone, Copy)]

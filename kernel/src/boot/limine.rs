@@ -1,4 +1,6 @@
-use limine::request::{FramebufferRequest, HhdmRequest, MemmapRequest, RsdpRequest};
+use limine::request::{
+    ExecutableCmdlineRequest, FramebufferRequest, HhdmRequest, MemmapRequest, RsdpRequest,
+};
 
 use crate::boot::boot_info::{convert_memory_map, BootInfo, Framebuffer};
 
@@ -17,6 +19,10 @@ static MEMORY_MAP_REQUEST: MemmapRequest = MemmapRequest::new();
 #[used]
 #[link_section = ".requests"]
 static RSDP_REQUEST: RsdpRequest = RsdpRequest::new();
+
+#[used]
+#[link_section = ".requests"]
+static EXECUTABLE_CMDLINE_REQUEST: ExecutableCmdlineRequest = ExecutableCmdlineRequest::new();
 
 pub fn init() -> BootInfo {
     let framebuffer = FRAMEBUFFER_REQUEST.response().and_then(|response| {
@@ -48,11 +54,15 @@ pub fn init() -> BootInfo {
     let rsdp_addr = RSDP_REQUEST
         .response()
         .map(|response| response.address as u64);
+    let cmdline = EXECUTABLE_CMDLINE_REQUEST
+        .response()
+        .map_or("", |response| response.cmdline());
 
     BootInfo {
         framebuffer,
         memory_map: memory_regions,
         hhdm_offset,
         rsdp_addr,
+        cmdline,
     }
 }

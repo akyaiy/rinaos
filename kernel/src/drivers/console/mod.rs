@@ -8,6 +8,7 @@ use crate::config::CONFIG;
 use crate::drivers::console::ansi::{AnsiAction, EscapeState};
 use crate::drivers::console::font::{Font, FALLBACK_FONT};
 use crate::drivers::framebuffer::{self, Color};
+use crate::krnl::klog;
 use crate::sync::spinlock::SpinLock;
 
 const MAX_COLS: usize = 240;
@@ -36,6 +37,7 @@ pub struct Console {
     bg: Color,
     default_fg: Color,
     default_bg: Color,
+    last_klog_sequence: u64,
     escape_state: EscapeState,
 }
 
@@ -75,6 +77,7 @@ pub fn init() {
         bg: default_bg,
         default_fg,
         default_bg,
+        last_klog_sequence: 0,
         escape_state: EscapeState::new(),
     };
 
@@ -101,6 +104,22 @@ pub fn write_str(text: &str) {
 pub fn _print(args: fmt::Arguments) {
     if let Some(console) = CONSOLE.lock().as_mut() {
         let _ = ConsoleWriter(console).write_fmt(args);
+    }
+}
+
+pub fn flush_klog() {
+    if let Some(console) = CONSOLE.lock().as_mut() {
+        while let Some(entry) = klog::next_after(console.last_klog_sequence) {
+            let timestamp_us = entry.timestamp_ns / 1_000;
+            let _ = ConsoleWriter(console).write_fmt(format_args!(
+                "[{:>6}.{:06}] [{}] {}\n",
+                timestamp_us / 1_000_000,
+                timestamp_us % 1_000_000,
+                entry.level.as_str(),
+                entry.message(),
+            ));
+            console.last_klog_sequence = entry.sequence;
+        }
     }
 }
 
