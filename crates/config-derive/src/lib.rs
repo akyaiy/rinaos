@@ -75,6 +75,18 @@ pub fn derive_config_emit(input: TokenStream) -> TokenStream {
                     path.pop();
                 )*
             }
+
+            fn emit_rerun_if_changed(
+                &self,
+                context: &::rinasys_config_schema::EmitContext,
+            ) {
+                #(
+                    ::rinasys_config_schema::ConfigEmit::emit_rerun_if_changed(
+                        &self.#field_idents,
+                        context,
+                    );
+                )*
+            }
         }
     }
     .into()
