@@ -1,9 +1,12 @@
+#[derive(Clone, Copy)]
 pub struct BootInfo {
     pub framebuffer: Option<Framebuffer>,
     pub memory_map: &'static [MemoryRegion],
     pub hhdm_offset: u64,
+    pub rsdp_addr: Option<u64>,
 }
 
+#[derive(Clone, Copy)]
 pub struct Framebuffer {
     pub addr: usize, // as *mut u32
     pub width: usize,

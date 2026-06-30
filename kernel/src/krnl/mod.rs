@@ -1,5 +1,5 @@
-use crate::boot::BootInfo;
 use crate::arch;
+use crate::boot::BootInfo;
 use crate::drivers::console;
 use crate::drivers::framebuffer;
 use crate::println;
@@ -12,13 +12,11 @@ pub fn init(boot_info: BootInfo) -> ! {
         framebuffer::init(fb);
         console::init();
         println!("starting kernel");
-        arch::init();
+        arch::init(&boot_info);
+        x86_64::instructions::interrupts::enable();
     }
 
-    panic!("piskua");
-
     loop {
-        x86_64::instructions::interrupts::disable();
         x86_64::instructions::hlt();
     }
 }

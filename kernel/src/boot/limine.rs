@@ -1,4 +1,4 @@
-use limine::request::{FramebufferRequest, HhdmRequest, MemmapRequest};
+use limine::request::{FramebufferRequest, HhdmRequest, MemmapRequest, RsdpRequest};
 
 use crate::boot::boot_info::{convert_memory_map, BootInfo, Framebuffer};
 
@@ -13,6 +13,10 @@ static HHDM_REQUEST: HhdmRequest = HhdmRequest::new();
 #[used]
 #[link_section = ".requests"]
 static MEMORY_MAP_REQUEST: MemmapRequest = MemmapRequest::new();
+
+#[used]
+#[link_section = ".requests"]
+static RSDP_REQUEST: RsdpRequest = RsdpRequest::new();
 
 pub fn init() -> BootInfo {
     let framebuffer = FRAMEBUFFER_REQUEST.response().and_then(|response| {
@@ -41,10 +45,14 @@ pub fn init() -> BootInfo {
 
     // TODO: non permanent solution
     let memory_regions = convert_memory_map(memory_map);
+    let rsdp_addr = RSDP_REQUEST
+        .response()
+        .map(|response| response.address as u64);
 
     BootInfo {
         framebuffer,
         memory_map: memory_regions,
         hhdm_offset,
+        rsdp_addr,
     }
 }
