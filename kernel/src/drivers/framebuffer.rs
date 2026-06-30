@@ -105,20 +105,17 @@ pub fn draw_glyph<F>(
     y: usize,
     width: usize,
     height: usize,
-    mut row_bits: F,
+    mut has_pixel: F,
     fg: Color,
     bg: Color,
 ) where
-    F: FnMut(usize) -> u8,
+    F: FnMut(usize, usize) -> bool,
 {
     if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
         unsafe {
             for row in 0..height {
-                let bits = row_bits(row);
-
                 for col in 0..width {
-                    let mask = 1 << (7 - col);
-                    let color = if bits & mask != 0 { fg } else { bg };
+                    let color = if has_pixel(row, col) { fg } else { bg };
                     fb.put_pixel(x + col, y + row, color);
                 }
             }
