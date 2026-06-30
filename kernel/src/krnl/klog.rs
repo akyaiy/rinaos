@@ -3,12 +3,12 @@ use core::sync::atomic::{AtomicU8, Ordering};
 
 use crate::drivers;
 use crate::krnl::time;
-use crate::sync::spinlock::SpinLock;
+use crate::sync::spinlock::IrqSpinLock;
 
 const ENTRY_COUNT: usize = 256;
 pub const MESSAGE_SIZE: usize = 512;
 
-static KLOG: SpinLock<KLog> = SpinLock::new(KLog::new());
+static KLOG: IrqSpinLock<KLog> = IrqSpinLock::new(KLog::new());
 static MAX_LEVEL: AtomicU8 = AtomicU8::new(LogLevel::Info as u8);
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

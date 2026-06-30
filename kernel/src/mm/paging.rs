@@ -1,4 +1,4 @@
-use crate::sync::spinlock::SpinLock;
+use crate::sync::spinlock::IrqSpinLock;
 use x86_64::registers::control::Cr3;
 use x86_64::structures::paging::mapper::{MapToError, Mapper, OffsetPageTable, Translate};
 use x86_64::structures::paging::page_table::PageTableFlags;
@@ -9,7 +9,7 @@ use x86_64::{PhysAddr as X86PhysAddr, VirtAddr};
 
 use super::{free_frames, PhysAddr, PhysFrame};
 
-static PAGING: SpinLock<PagingState> = SpinLock::new(PagingState::new());
+static PAGING: IrqSpinLock<PagingState> = IrqSpinLock::new(PagingState::new());
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PagingError {

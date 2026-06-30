@@ -1,7 +1,9 @@
 use core::cell::UnsafeCell;
 use core::hint::spin_loop;
+use core::mem::ManuallyDrop;
 use core::ops::{Deref, DerefMut};
 use core::sync::atomic::{AtomicBool, Ordering};
+use x86_64::instructions::interrupts;
 
 pub struct SpinLock<T> {
     locked: AtomicBool,
@@ -10,6 +12,15 @@ pub struct SpinLock<T> {
 
 pub struct SpinLockGuard<'a, T> {
     lock: &'a SpinLock<T>,
+}
+
+pub struct IrqSpinLock<T> {
+    inner: SpinLock<T>,
+}
+
+pub struct IrqSpinLockGuard<'a, T> {
+    guard: ManuallyDrop<SpinLockGuard<'a, T>>,
+    restore_interrupts: bool,
 }
 
 unsafe impl<T: Send> Sync for SpinLock<T> {}
@@ -53,5 +64,52 @@ impl<T> DerefMut for SpinLockGuard<'_, T> {
 impl<T> Drop for SpinLockGuard<'_, T> {
     fn drop(&mut self) {
         self.lock.locked.store(false, Ordering::Release);
+    }
+}
+
+unsafe impl<T: Send> Sync for IrqSpinLock<T> {}
+unsafe impl<T: Send> Send for IrqSpinLock<T> {}
+
+impl<T> IrqSpinLock<T> {
+    pub const fn new(value: T) -> Self {
+        Self {
+            inner: SpinLock::new(value),
+        }
+    }
+
+    pub fn lock(&self) -> IrqSpinLockGuard<'_, T> {
+        let restore_interrupts = interrupts::are_enabled();
+        interrupts::disable();
+
+        IrqSpinLockGuard {
+            guard: ManuallyDrop::new(self.inner.lock()),
+            restore_interrupts,
+        }
+    }
+}
+
+impl<T> Deref for IrqSpinLockGuard<'_, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.guard
+    }
+}
+
+impl<T> DerefMut for IrqSpinLockGuard<'_, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.guard
+    }
+}
+
+impl<T> Drop for IrqSpinLockGuard<'_, T> {
+    fn drop(&mut self) {
+        unsafe {
+            ManuallyDrop::drop(&mut self.guard);
+        }
+
+        if self.restore_interrupts {
+            interrupts::enable();
+        }
     }
 }

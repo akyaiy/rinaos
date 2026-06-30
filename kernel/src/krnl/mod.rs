@@ -5,6 +5,8 @@ use crate::drivers::framebuffer;
 use crate::drivers::keyboard;
 use crate::drivers::serial;
 use crate::mm;
+use crate::sched;
+use crate::vfs;
 use crate::{klog_debug, klog_error, klog_info};
 use x86_64;
 
@@ -34,11 +36,49 @@ pub fn init(boot_info: BootInfo) -> ! {
     arch::init(&boot_info);
     mm::init(&boot_info);
     klog_debug!("memory manager initialized");
+    vfs::init();
+    klog_debug!("vfs initialized");
+    smoke_test_vfs();
+    sched::init();
+    sched::spawn_kernel(printer_task_a);
+    sched::spawn_kernel(printer_task_b);
     klog_debug!("main subsystems initialized");
     x86_64::instructions::interrupts::enable();
     klog_debug!("interrupts enabled");
+    sched::yield_now();
     klog_info!("halting kernel proccess");
     halt()
+}
+
+fn smoke_test_vfs() {
+    match vfs::open("/dev/console", vfs::OpenFlags::WRONLY) {
+        Ok(mut console) => {
+            if console.write(b"vfs: /dev/console ready\n").is_err() {
+                klog_error!("vfs: failed to write to /dev/console");
+            }
+        }
+        Err(_) => klog_error!("vfs: failed to open /dev/console"),
+    }
+}
+
+fn printer_task_a() -> ! {
+    loop {
+        crate::println!("\x1b[31mpkl gay\x1b[0m");
+        for _ in 0..5_000 {
+            core::hint::spin_loop();
+        }
+        sched::yield_now();
+    }
+}
+
+fn printer_task_b() -> ! {
+    loop {
+        crate::println!("\x1b[34mpkl gay\x1b[0m");
+        for _ in 0..5_000 {
+            core::hint::spin_loop();
+        }
+        sched::yield_now();
+    }
 }
 
 fn halt() -> ! {

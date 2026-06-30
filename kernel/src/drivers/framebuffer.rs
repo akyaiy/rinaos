@@ -1,9 +1,9 @@
 use core::ptr;
 
 use crate::boot::Framebuffer as FramebufferInfo;
-use crate::sync::spinlock::SpinLock;
+use crate::sync::spinlock::IrqSpinLock;
 
-static FRAMEBUFFER: SpinLock<Option<Framebuffer>> = SpinLock::new(None);
+static FRAMEBUFFER: IrqSpinLock<Option<Framebuffer>> = IrqSpinLock::new(None);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Color {

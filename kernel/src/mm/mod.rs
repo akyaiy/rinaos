@@ -3,15 +3,15 @@ pub mod heap;
 pub mod paging;
 
 use crate::boot::BootInfo;
-use crate::sync::spinlock::SpinLock;
+use crate::sync::spinlock::IrqSpinLock;
 use crate::{klog_debug, klog_info};
 
 pub use buddy::{BuddyStats, PhysAddr, PhysFrame};
 
 pub const PAGE_SIZE: u64 = buddy::PAGE_SIZE;
 
-static FRAME_ALLOCATOR: SpinLock<buddy::BuddyAllocator> =
-    SpinLock::new(buddy::BuddyAllocator::new());
+static FRAME_ALLOCATOR: IrqSpinLock<buddy::BuddyAllocator> =
+    IrqSpinLock::new(buddy::BuddyAllocator::new());
 
 pub fn init(boot_info: &BootInfo) {
     let mut allocator = FRAME_ALLOCATOR.lock();

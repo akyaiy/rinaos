@@ -10,9 +10,12 @@ mod arch;
 mod boot;
 mod config;
 mod drivers;
+mod fs;
 mod krnl;
 mod mm;
+mod sched;
 mod sync;
+mod vfs;
 
 use core::panic::PanicInfo;
 

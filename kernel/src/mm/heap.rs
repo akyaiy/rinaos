@@ -2,7 +2,7 @@ use core::alloc::{GlobalAlloc, Layout};
 use core::mem;
 use core::ptr::null_mut;
 
-use crate::sync::spinlock::SpinLock;
+use crate::sync::spinlock::IrqSpinLock;
 
 use super::{paging, PAGE_SIZE};
 
@@ -22,7 +22,7 @@ struct FreeNode {
 }
 
 struct LockedSlabAllocator {
-    inner: SpinLock<SlabAllocator>,
+    inner: IrqSpinLock<SlabAllocator>,
 }
 
 struct SlabAllocator {
@@ -59,7 +59,7 @@ unsafe impl Send for SlabAllocator {}
 impl LockedSlabAllocator {
     const fn new() -> Self {
         Self {
-            inner: SpinLock::new(SlabAllocator::new()),
+            inner: IrqSpinLock::new(SlabAllocator::new()),
         }
     }
 

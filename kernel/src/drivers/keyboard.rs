@@ -1,16 +1,15 @@
 use pc_keyboard::{layouts, DecodedKey, HandleControl, Keyboard, KeyCode, ScancodeSet1};
-use x86_64::instructions::interrupts;
 use x86_64::instructions::port::Port;
 
 use crate::drivers::console;
-use crate::sync::spinlock::SpinLock;
+use crate::sync::spinlock::IrqSpinLock;
 
 const PS2_DATA_PORT: u16 = 0x60;
 const SCANCODE_QUEUE_SIZE: usize = 256;
 
-static KEYBOARD: SpinLock<Option<Keyboard<layouts::Us104Key, ScancodeSet1>>> =
-    SpinLock::new(None);
-static SCANCODE_QUEUE: SpinLock<ScancodeQueue> = SpinLock::new(ScancodeQueue::new());
+static KEYBOARD: IrqSpinLock<Option<Keyboard<layouts::Us104Key, ScancodeSet1>>> =
+    IrqSpinLock::new(None);
+static SCANCODE_QUEUE: IrqSpinLock<ScancodeQueue> = IrqSpinLock::new(ScancodeQueue::new());
 
 struct ScancodeQueue {
     bytes: [u8; SCANCODE_QUEUE_SIZE],
@@ -75,13 +74,11 @@ pub fn poll() {
 }
 
 fn push_scancode(scancode: u8) {
-    interrupts::without_interrupts(|| {
-        SCANCODE_QUEUE.lock().push(scancode);
-    });
+    SCANCODE_QUEUE.lock().push(scancode);
 }
 
 fn pop_scancode() -> Option<u8> {
-    interrupts::without_interrupts(|| SCANCODE_QUEUE.lock().pop())
+    SCANCODE_QUEUE.lock().pop()
 }
 
 fn decode_scancode(scancode: u8) {

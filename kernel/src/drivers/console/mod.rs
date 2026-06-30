@@ -9,14 +9,14 @@ use crate::drivers::console::ansi::{AnsiAction, EscapeState};
 use crate::drivers::console::font::{Font, FALLBACK_FONT};
 use crate::drivers::framebuffer::{self, Color};
 use crate::krnl::klog;
-use crate::sync::spinlock::SpinLock;
+use crate::sync::spinlock::IrqSpinLock;
 
 const MAX_COLS: usize = 240;
 const MAX_ROWS: usize = 135;
 const MAX_CELLS: usize = MAX_COLS * MAX_ROWS;
 const TAB_WIDTH: usize = 4;
 
-static CONSOLE: SpinLock<Option<Console>> = SpinLock::new(None);
+static CONSOLE: IrqSpinLock<Option<Console>> = IrqSpinLock::new(None);
 static mut CELLS: [Cell; MAX_CELLS] = [Cell::blank(); MAX_CELLS];
 
 #[derive(Clone, Copy)]

@@ -4,11 +4,11 @@ use x86_64::instructions::port::Port;
 
 use crate::config::CONFIG;
 use crate::krnl::klog;
-use crate::sync::spinlock::SpinLock;
+use crate::sync::spinlock::IrqSpinLock;
 
 const COM1: u16 = 0x3f8;
 
-static SERIAL: SpinLock<SerialPort> = SpinLock::new(SerialPort::new(COM1));
+static SERIAL: IrqSpinLock<SerialPort> = IrqSpinLock::new(SerialPort::new(COM1));
 
 pub struct SerialPort {
     base: u16,
