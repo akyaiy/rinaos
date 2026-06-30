@@ -4,6 +4,7 @@
 mod boot;
 mod drivers;
 mod krnl;
+mod sync;
 
 use core::panic::PanicInfo;
 
