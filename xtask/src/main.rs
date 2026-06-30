@@ -68,7 +68,7 @@ fn run(flags: flags::Xtask) -> xshell::Result<()> {
 
     match flags.subcommand {
         flags::XtaskCmd::BuildKernel(flags) => {
-            let config = flags.config.unwrap_or_else(|| PathBuf::from("qemu"));
+            let config = flags.config.unwrap_or_else(|| PathBuf::from("default"));
             build_kernel(&sh, &config)
         }
     }
