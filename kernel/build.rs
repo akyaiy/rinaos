@@ -7,6 +7,13 @@ fn main() {
         .expect("RINASYS_KERNEL_CONFIG must point to a kernel config TOML");
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
 
+    println!(
+        "cargo:rerun-if-changed={}",
+        manifest_dir.join("linker.ld").display()
+    );
+    println!("cargo:rerun-if-env-changed=RINASYS_KERNEL_CONFIG");
+    println!("cargo:rerun-if-changed={}", config_path.display());
+
     rinasys_config_codegen::generate_kernel_config(
         &manifest_dir,
         &config_path,
