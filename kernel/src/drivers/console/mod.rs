@@ -3,8 +3,9 @@ mod font;
 
 use core::ptr;
 
+use crate::config::CONFIG;
 use crate::drivers::console::ansi::{AnsiAction, EscapeState};
-use crate::drivers::console::font::{Font, DEFAULT_FONT};
+use crate::drivers::console::font::{Font, FALLBACK_FONT};
 use crate::drivers::framebuffer::{self, Color};
 use crate::sync::spinlock::SpinLock;
 
@@ -32,6 +33,8 @@ pub struct Console {
     cursor_visible: bool,
     fg: Color,
     bg: Color,
+    default_fg: Color,
+    default_bg: Color,
     escape_state: EscapeState,
 }
 
@@ -50,9 +53,15 @@ impl Cell {
 }
 
 pub fn init() {
-    let font = DEFAULT_FONT;
-    let cols = (framebuffer::width() / font.width).min(MAX_COLS);
-    let rows = (framebuffer::height() / font.height).min(MAX_ROWS);
+    let font = Font::from_bytes(CONFIG.framebuffer.font.bytes).unwrap_or(FALLBACK_FONT);
+    let framebuffer_cols = framebuffer::width() / font.width;
+    let framebuffer_rows = framebuffer::height() / font.height;
+    let configured_cols = CONFIG.framebuffer.columns;
+    let configured_rows = CONFIG.framebuffer.rows;
+    let cols = configured_limit(framebuffer_cols, configured_cols).min(MAX_COLS);
+    let rows = configured_limit(framebuffer_rows, configured_rows).min(MAX_ROWS);
+    let default_fg = config_color(CONFIG.framebuffer.foreground);
+    let default_bg = config_color(CONFIG.framebuffer.background);
 
     let mut console = Console {
         font,
@@ -61,8 +70,10 @@ pub fn init() {
         cursor_x: 0,
         cursor_y: 0,
         cursor_visible: false,
-        fg: Color::WHITE,
-        bg: Color::BLACK,
+        fg: default_fg,
+        bg: default_bg,
+        default_fg,
+        default_bg,
         escape_state: EscapeState::new(),
     };
 
@@ -280,7 +291,7 @@ impl Console {
             y,
             self.font.width,
             self.font.height,
-            |row| self.font.row_bits(cell.ch, row),
+            |row, col| self.font.has_pixel(cell.ch, row, col),
             fg,
             bg,
         );
@@ -303,8 +314,8 @@ impl Console {
     }
 
     fn reset_colors(&mut self) {
-        self.fg = Color::WHITE;
-        self.bg = Color::BLACK;
+        self.fg = self.default_fg;
+        self.bg = self.default_bg;
     }
 
     fn cell(&self, x: usize, y: usize) -> Cell {
@@ -341,6 +352,18 @@ fn ansi_color(index: u16) -> Color {
         6 => Color::rgb(0, 170, 170),
         _ => Color::rgb(170, 170, 170),
     }
+}
+
+fn configured_limit(actual: usize, configured: usize) -> usize {
+    if configured == 0 {
+        actual
+    } else {
+        actual.min(configured)
+    }
+}
+
+fn config_color(color: rinasys_config_schema::FramebufferColorConfig) -> Color {
+    Color::rgb(color.r, color.g, color.b)
 }
 
 fn cell_ptr() -> *mut Cell {
