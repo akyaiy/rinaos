@@ -243,6 +243,9 @@ impl Console {
     fn backspace(&mut self) {
         if self.cursor_x > 0 {
             self.cursor_x -= 1;
+            let blank = Cell::with_colors(self.fg, self.bg);
+            self.set_cell(self.cursor_x, self.cursor_y, blank);
+            self.draw_cell(self.cursor_x, self.cursor_y, blank, false);
         }
     }
 

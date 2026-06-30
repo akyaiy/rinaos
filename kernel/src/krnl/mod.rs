@@ -2,6 +2,7 @@ use crate::arch;
 use crate::boot::BootInfo;
 use crate::drivers::console;
 use crate::drivers::framebuffer;
+use crate::drivers::keyboard;
 use crate::drivers::serial;
 use crate::mm;
 use crate::{klog_debug, klog_error, klog_info};
@@ -26,6 +27,8 @@ pub fn init(boot_info: BootInfo) -> ! {
     }
     console::init();
     klog_debug!("console initialized");
+    keyboard::init();
+    klog_debug!("keyboard initialized");
     klog_debug!("flushing klog");
     console::flush_klog();
     arch::init(&boot_info);
@@ -40,6 +43,8 @@ pub fn init(boot_info: BootInfo) -> ! {
 
 fn halt() -> ! {
     loop {
+        keyboard::poll();
+        console::flush_klog();
         x86_64::instructions::hlt();
     }
 }

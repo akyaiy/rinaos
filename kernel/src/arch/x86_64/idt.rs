@@ -2,7 +2,7 @@ use lazy_static::lazy_static;
 use x86_64::registers::control::Cr2;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 
-use crate::println;
+use crate::{drivers::keyboard, println};
 
 use super::{gdt, interrupts};
 
@@ -85,6 +85,8 @@ extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFr
 }
 
 extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    keyboard::handle_interrupt();
+
     unsafe {
         interrupts::eoi(interrupts::KEYBOARD_VECTOR);
     }
