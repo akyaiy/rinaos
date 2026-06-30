@@ -1,29 +1,135 @@
 pub struct Font {
     pub width: usize,
     pub height: usize,
+    data: FontData,
 }
 
-pub const DEFAULT_FONT: Font = Font {
+#[derive(Clone, Copy)]
+enum FontData {
+    Builtin,
+    Psf {
+        glyphs: &'static [u8],
+        glyph_count: usize,
+        bytes_per_glyph: usize,
+    },
+}
+
+pub const FALLBACK_FONT: Font = Font {
     width: 8,
     height: 16,
+    data: FontData::Builtin,
 };
 
 impl Font {
-    pub fn row_bits(&self, ch: u8, row: usize) -> u8 {
-        if row >= self.height {
-            return 0;
+    pub fn from_bytes(bytes: &'static [u8]) -> Option<Self> {
+        parse_psf2(bytes).or_else(|| parse_psf1(bytes))
+    }
+
+    pub fn has_pixel(&self, ch: u8, row: usize, col: usize) -> bool {
+        if row >= self.height || col >= self.width {
+            return false;
         }
 
-        let glyph_row = row / 2;
+        match self.data {
+            FontData::Builtin => {
+                let glyph_row = row / 2;
 
-        if glyph_row >= 7 {
-            return 0;
+                if glyph_row >= 7 {
+                    return false;
+                }
+
+                let bits = glyph_5x7(ch)[glyph_row] << 1;
+                bits & (1 << (7 - col)) != 0
+            }
+            FontData::Psf {
+                glyphs,
+                glyph_count,
+                bytes_per_glyph,
+            } => {
+                let glyph_index = (ch as usize).min(glyph_count.saturating_sub(1));
+                let row_stride = self.width.div_ceil(8);
+                let glyph_offset = glyph_index * bytes_per_glyph;
+                let byte = glyphs[glyph_offset + row * row_stride + col / 8];
+                let mask = 0x80 >> (col % 8);
+
+                byte & mask != 0
+            }
         }
-
-        glyph_5x7(ch)[glyph_row] << 1
     }
 }
 
+fn parse_psf2(bytes: &'static [u8]) -> Option<Font> {
+    const PSF2_MAGIC: u32 = 0x864ab572;
+    const HEADER_SIZE: usize = 32;
+
+    if bytes.len() < HEADER_SIZE || read_u32(bytes, 0)? != PSF2_MAGIC {
+        return None;
+    }
+
+    let header_size = read_u32(bytes, 8)? as usize;
+    let glyph_count = read_u32(bytes, 16)? as usize;
+    let bytes_per_glyph = read_u32(bytes, 20)? as usize;
+    let height = read_u32(bytes, 24)? as usize;
+    let width = read_u32(bytes, 28)? as usize;
+    let glyph_bytes = glyph_count.checked_mul(bytes_per_glyph)?;
+    let glyph_end = header_size.checked_add(glyph_bytes)?;
+
+    if width == 0 || height == 0 || bytes_per_glyph == 0 || bytes.len() < glyph_end {
+        return None;
+    }
+
+    Some(Font {
+        width,
+        height,
+        data: FontData::Psf {
+            glyphs: &bytes[header_size..glyph_end],
+            glyph_count,
+            bytes_per_glyph,
+        },
+    })
+}
+
+fn parse_psf1(bytes: &'static [u8]) -> Option<Font> {
+    const PSF1_MAGIC_0: u8 = 0x36;
+    const PSF1_MAGIC_1: u8 = 0x04;
+    const PSF1_MODE512: u8 = 0x01;
+    const HEADER_SIZE: usize = 4;
+
+    if bytes.len() < HEADER_SIZE || bytes[0] != PSF1_MAGIC_0 || bytes[1] != PSF1_MAGIC_1 {
+        return None;
+    }
+
+    let mode = bytes[2];
+    let bytes_per_glyph = bytes[3] as usize;
+    let glyph_count: usize = if mode & PSF1_MODE512 != 0 { 512 } else { 256 };
+    let glyph_bytes = glyph_count.checked_mul(bytes_per_glyph)?;
+    let glyph_end = HEADER_SIZE.checked_add(glyph_bytes)?;
+
+    if bytes_per_glyph == 0 || bytes.len() < glyph_end {
+        return None;
+    }
+
+    Some(Font {
+        width: 8,
+        height: bytes_per_glyph,
+        data: FontData::Psf {
+            glyphs: &bytes[HEADER_SIZE..glyph_end],
+            glyph_count,
+            bytes_per_glyph,
+        },
+    })
+}
+
+fn read_u32(bytes: &[u8], offset: usize) -> Option<u32> {
+    Some(u32::from_le_bytes([
+        *bytes.get(offset)?,
+        *bytes.get(offset + 1)?,
+        *bytes.get(offset + 2)?,
+        *bytes.get(offset + 3)?,
+    ]))
+}
+
+// fallback glyph
 fn glyph_5x7(ch: u8) -> [u8; 7] {
     match ch {
         b'a'..=b'z' => glyph_5x7(ch - 32),
