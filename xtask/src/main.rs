@@ -1,9 +1,14 @@
-use std::path::{Path, PathBuf};
+use std::{
+    error::Error,
+    ffi::OsString,
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 use xshell::{cmd, Shell};
 
 mod flags {
-    use std::path::PathBuf;
+    use std::{ffi::OsString, path::PathBuf};
 
     xflags::xflags! {
         src "./src/main.rs"
@@ -14,6 +19,42 @@ mod flags {
             cmd build-kernel {
                 /// Config profile name from kernel/config/*.toml or a path.
                 optional --config config: PathBuf
+            }
+
+            /// Build a bootable Limine ISO.
+            cmd build-iso {
+                /// Config profile name from kernel/config/*.toml or a path.
+                optional --config config: PathBuf
+
+                /// Build with the release profile.
+                optional --release
+
+                /// Output ISO path.
+                optional --out out: PathBuf
+
+                /// Limine build/install directory.
+                optional --limine-dir limine_dir: PathBuf
+            }
+
+            /// Build and run the Limine ISO in QEMU.
+            cmd run-qemu {
+                /// Config profile name from kernel/config/*.toml or a path.
+                optional --config config: PathBuf
+
+                /// Build with the release profile.
+                optional --release
+
+                /// ISO path to build/run.
+                optional --out out: PathBuf
+
+                /// Limine build/install directory.
+                optional --limine-dir limine_dir: PathBuf
+
+                /// Run an existing ISO without rebuilding it first.
+                optional --no-build
+
+                /// Extra arguments passed directly to qemu-system-x86_64.
+                repeated qemu_args: OsString
             }
         }
     }
@@ -28,11 +69,31 @@ mod flags {
     #[derive(Debug)]
     pub enum XtaskCmd {
         BuildKernel(BuildKernel),
+        BuildIso(BuildIso),
+        RunQemu(RunQemu),
     }
 
     #[derive(Debug)]
     pub struct BuildKernel {
         pub config: Option<PathBuf>,
+    }
+
+    #[derive(Debug)]
+    pub struct BuildIso {
+        pub config: Option<PathBuf>,
+        pub release: bool,
+        pub out: Option<PathBuf>,
+        pub limine_dir: Option<PathBuf>,
+    }
+
+    #[derive(Debug)]
+    pub struct RunQemu {
+        pub config: Option<PathBuf>,
+        pub release: bool,
+        pub out: Option<PathBuf>,
+        pub limine_dir: Option<PathBuf>,
+        pub no_build: bool,
+        pub qemu_args: Vec<OsString>,
     }
 
     impl Xtask {
@@ -63,7 +124,9 @@ fn main() {
     }
 }
 
-fn run(flags: flags::Xtask) -> xshell::Result<()> {
+type Result<T> = std::result::Result<T, Box<dyn Error>>;
+
+fn run(flags: flags::Xtask) -> Result<()> {
     let sh = Shell::new()?;
 
     match flags.subcommand {
@@ -71,15 +134,172 @@ fn run(flags: flags::Xtask) -> xshell::Result<()> {
             let config = flags.config.unwrap_or_else(|| PathBuf::from("default"));
             build_kernel(&sh, &config)
         }
+        flags::XtaskCmd::BuildIso(flags) => {
+            let config = flags.config.unwrap_or_else(|| PathBuf::from("default"));
+            build_iso(&sh, &config, flags.release, flags.out, flags.limine_dir)
+        }
+        flags::XtaskCmd::RunQemu(flags) => {
+            let config = flags.config.unwrap_or_else(|| PathBuf::from("default"));
+            run_qemu(
+                &sh,
+                &config,
+                flags.release,
+                flags.out,
+                flags.limine_dir,
+                flags.no_build,
+                flags.qemu_args,
+            )
+        }
     }
 }
 
-fn build_kernel(sh: &Shell, config: &Path) -> xshell::Result<()> {
+fn build_kernel(sh: &Shell, config: &Path) -> Result<()> {
     let config = sh.current_dir().join(config_path(config));
+    let target = "x86_64-unknown-none";
 
-    cmd!(sh, "cargo build --manifest-path kernel/Cargo.toml")
-        .env("RINASYS_KERNEL_CONFIG", config)
-        .run()
+    cmd!(
+        sh,
+        "cargo build --manifest-path kernel/Cargo.toml --bin kernel --target {target}"
+    )
+    .env("RINASYS_KERNEL_CONFIG", config)
+    .run()?;
+
+    Ok(())
+}
+
+fn build_iso(
+    sh: &Shell,
+    config: &Path,
+    release: bool,
+    out: Option<PathBuf>,
+    limine_dir: Option<PathBuf>,
+) -> Result<()> {
+    need_cmd(sh, "cargo")?;
+    need_cmd(sh, "xorriso")?;
+
+    let root = sh.current_dir();
+    let config = root.join(config_path(config));
+    let target = "x86_64-unknown-none";
+    let profile = if release { "release" } else { "debug" };
+    let out_dir = root.join("target/iso");
+    let iso_root = out_dir.join("root");
+    let iso_path = out.unwrap_or_else(|| out_dir.join("rinasys.iso"));
+    let release_arg = release.then_some("--release");
+
+    let limine_dir = find_or_fetch_limine(sh, limine_dir.as_deref())?;
+    let limine = LimineFiles::new(&root, &limine_dir)?;
+
+    fs::remove_dir_all(&iso_root).ok();
+    fs::create_dir_all(iso_root.join("boot"))?;
+    fs::create_dir_all(iso_root.join("EFI/BOOT"))?;
+
+    cmd!(
+        sh,
+        "cargo build --manifest-path kernel/Cargo.toml --bin kernel --target {target} {release_arg...}"
+    )
+    .env("RINASYS_KERNEL_CONFIG", config)
+    .run()?;
+
+    let kernel = root
+        .join("target")
+        .join(target)
+        .join(profile)
+        .join("kernel");
+    fs::copy(kernel, iso_root.join("boot/kernel.elf"))?;
+    fs::copy(
+        root.join("boot/limine/limine.conf"),
+        iso_root.join("boot/limine.conf"),
+    )?;
+    fs::copy(&limine.bios_cd, iso_root.join("limine-bios-cd.bin"))?;
+    fs::copy(&limine.bios_sys, iso_root.join("limine-bios.sys"))?;
+
+    let mut xorriso_args = vec![
+        "-as",
+        "mkisofs",
+        "-R",
+        "-r",
+        "-J",
+        "-b",
+        "limine-bios-cd.bin",
+        "-no-emul-boot",
+        "-boot-load-size",
+        "4",
+        "-boot-info-table",
+        "-hfsplus",
+        "-apm-block-size",
+        "2048",
+        "--protective-msdos-label",
+    ];
+
+    if let Some(uefi_cd) = &limine.uefi_cd {
+        fs::copy(uefi_cd, iso_root.join("limine-uefi-cd.bin"))?;
+        xorriso_args.extend([
+            "--efi-boot",
+            "limine-uefi-cd.bin",
+            "-efi-boot-part",
+            "--efi-boot-image",
+        ]);
+    }
+
+    if let Some(efi) = &limine.efi {
+        fs::copy(efi, iso_root.join("EFI/BOOT/BOOTX64.EFI"))?;
+    }
+
+    cmd!(sh, "xorriso {xorriso_args...} {iso_root} -o {iso_path}").run()?;
+
+    let limine_install = &limine.install;
+    if let Some(parent) = limine_install.parent() {
+        cmd!(sh, "{limine_install} bios-install {iso_path}")
+            .env(
+                "PATH",
+                format!(
+                    "{}:{}",
+                    parent.display(),
+                    std::env::var("PATH").unwrap_or_default()
+                ),
+            )
+            .run()?;
+    } else {
+        cmd!(sh, "{limine_install} bios-install {iso_path}").run()?;
+    }
+
+    println!("ISO written to {}", iso_path.display());
+    Ok(())
+}
+
+fn run_qemu(
+    sh: &Shell,
+    config: &Path,
+    release: bool,
+    out: Option<PathBuf>,
+    limine_dir: Option<PathBuf>,
+    no_build: bool,
+    extra_qemu_args: Vec<OsString>,
+) -> Result<()> {
+    need_cmd(sh, "qemu-system-x86_64")?;
+
+    let root = sh.current_dir();
+    let iso_path = out.unwrap_or_else(|| root.join("target/iso/rinasys.iso"));
+
+    if !no_build {
+        build_iso(sh, config, release, Some(iso_path.clone()), limine_dir)?;
+    } else if !iso_path.is_file() {
+        return Err(other_error(format!(
+            "ISO not found: {}. Run without --no-build to create it.",
+            iso_path.display()
+        )));
+    }
+
+    let mut qemu_args = vec![
+        OsString::from("-cdrom"),
+        iso_path.into_os_string(),
+        OsString::from("-boot"),
+        OsString::from("d"),
+    ];
+    qemu_args.extend(extra_qemu_args);
+
+    cmd!(sh, "qemu-system-x86_64 {qemu_args...}").run()?;
+    Ok(())
 }
 
 fn config_path(value: &Path) -> PathBuf {
@@ -90,4 +310,142 @@ fn config_path(value: &Path) -> PathBuf {
             .join(value)
             .with_extension("toml")
     }
+}
+
+struct LimineFiles {
+    bios_cd: PathBuf,
+    bios_sys: PathBuf,
+    uefi_cd: Option<PathBuf>,
+    efi: Option<PathBuf>,
+    install: PathBuf,
+}
+
+impl LimineFiles {
+    fn new(root: &Path, limine_dir: &Path) -> Result<Self> {
+        let bios_cd = find_limine_file(root, limine_dir, "limine-bios-cd.bin")
+            .ok_or_else(|| missing_limine("limine-bios-cd.bin"))?;
+        let bios_sys = find_limine_file(root, limine_dir, "limine-bios.sys")
+            .ok_or_else(|| missing_limine("limine-bios.sys"))?;
+        let install = find_limine_install(root, limine_dir)
+            .ok_or_else(|| missing_limine("limine or limine-install"))?;
+
+        Ok(Self {
+            bios_cd,
+            bios_sys,
+            uefi_cd: find_limine_file(root, limine_dir, "limine-uefi-cd.bin"),
+            efi: find_limine_file(root, limine_dir, "BOOTX64.EFI"),
+            install,
+        })
+    }
+}
+
+fn find_or_fetch_limine(sh: &Shell, explicit_dir: Option<&Path>) -> Result<PathBuf> {
+    if let Some(path) = explicit_dir {
+        return Ok(path.to_path_buf());
+    }
+
+    if let Ok(path) = std::env::var("LIMINE_DIR") {
+        return Ok(PathBuf::from(path));
+    }
+
+    let root = sh.current_dir();
+    for path in [
+        root.join("limine"),
+        root.join("vendor/limine"),
+        root.join("target/limine"),
+        PathBuf::from("/usr/share/limine"),
+        PathBuf::from("/usr/local/share/limine"),
+    ] {
+        if path.join("limine-bios-cd.bin").is_file() && path.join("limine-bios.sys").is_file() {
+            return Ok(path);
+        }
+    }
+
+    fetch_limine(sh)
+}
+
+fn fetch_limine(sh: &Shell) -> Result<PathBuf> {
+    need_cmd(sh, "curl")?;
+    need_cmd(sh, "tar")?;
+
+    let root = sh.current_dir();
+    let cache = root.join("target/limine-cache");
+    let archive = cache.join("limine-binaries.tar.xz");
+    let extract_dir = cache.join("extract");
+    let out_dir = root.join("target/limine");
+
+    fs::create_dir_all(&cache)?;
+    fs::remove_dir_all(&extract_dir).ok();
+    fs::remove_dir_all(&out_dir).ok();
+    fs::create_dir_all(&extract_dir)?;
+
+    let url = "https://github.com/limine-bootloader/limine/releases/latest/download/limine-binaries.tar.xz";
+    cmd!(sh, "curl -L --fail -o {archive} {url}").run()?;
+    cmd!(sh, "tar -xf {archive} -C {extract_dir}").run()?;
+
+    let extracted = fs::read_dir(&extract_dir)?
+        .filter_map(std::result::Result::ok)
+        .map(|entry| entry.path())
+        .find(|path| path.join("limine-bios-cd.bin").is_file())
+        .ok_or_else(|| other_error("downloaded Limine archive did not contain boot files"))?;
+
+    fs::rename(extracted, &out_dir)?;
+    Ok(out_dir)
+}
+
+fn find_limine_file(root: &Path, limine_dir: &Path, name: &str) -> Option<PathBuf> {
+    [
+        limine_dir.join(name),
+        root.join("limine").join(name),
+        root.join("vendor/limine").join(name),
+        root.join("target/limine").join(name),
+        PathBuf::from("/usr/share/limine").join(name),
+        PathBuf::from("/usr/local/share/limine").join(name),
+        limine_dir.join("share/limine").join(name),
+        limine_dir.join("bin").join(name),
+    ]
+    .into_iter()
+    .find(|path| path.is_file())
+}
+
+fn find_limine_install(root: &Path, limine_dir: &Path) -> Option<PathBuf> {
+    ["limine", "limine-install"]
+        .into_iter()
+        .flat_map(|name| {
+            [
+                limine_dir.join(name),
+                limine_dir.join("bin").join(name),
+                root.join("target/limine").join(name),
+                root.join("target/limine/bin").join(name),
+            ]
+        })
+        .find(|path| path.is_file())
+        .or_else(|| which("limine"))
+        .or_else(|| which("limine-install"))
+}
+
+fn need_cmd(_sh: &Shell, name: &str) -> Result<()> {
+    if which(name).is_some() {
+        Ok(())
+    } else {
+        Err(other_error(format!("required command not found: {name}")))
+    }
+}
+
+fn which(name: &str) -> Option<PathBuf> {
+    std::env::var_os("PATH").and_then(|paths| {
+        std::env::split_paths(&paths)
+            .map(|path| path.join(name))
+            .find(|path| path.is_file())
+    })
+}
+
+fn missing_limine(name: &str) -> Box<dyn Error> {
+    other_error(format!(
+        "Limine file not found: {name}. Set --limine-dir or LIMINE_DIR to a Limine binary directory."
+    ))
+}
+
+fn other_error(message: impl Into<String>) -> Box<dyn Error> {
+    Box::new(io::Error::new(io::ErrorKind::Other, message.into()))
 }
