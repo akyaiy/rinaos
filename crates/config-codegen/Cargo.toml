@@ -1,0 +1,9 @@
+[package]
+name = "rinasys-config-codegen"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+quote = "1"
+rinasys-config-schema = { path = "../config-schema", features = ["codegen", "serde"] }
+toml = "0.8"

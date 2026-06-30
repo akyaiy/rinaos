@@ -1,0 +1,9 @@
+[workspace]
+members = [
+    "crates/config-codegen",
+    "crates/config-derive",
+    "crates/config-schema",
+    "kernel",
+    "xtask",
+]
+resolver = "2"

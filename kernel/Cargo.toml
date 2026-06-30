@@ -1,0 +1,14 @@
+[package]
+name = "rinasys-kernel"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+rinasys-config-schema = { path = "../crates/config-schema" }
+
+[build-dependencies]
+rinasys-config-codegen = { path = "../crates/config-codegen" }
