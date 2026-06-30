@@ -9,7 +9,7 @@ path = "src/lib.rs"
 
 [[bin]]
 name = "kernel"
-path = "src/kernel.rs"
+path = "src/kmain.rs"
 
 [dependencies]
 rinasys-config-schema = { path = "../crates/config-schema" }

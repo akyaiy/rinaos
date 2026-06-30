@@ -6,4 +6,10 @@ members = [
     "kernel",
     "xtask",
 ]
+default-members = [
+    "crates/config-codegen",
+    "crates/config-derive",
+    "crates/config-schema",
+    "xtask",
+]
 resolver = "2"
