@@ -2,6 +2,8 @@
 enabled = true
 
 [framebuffer]
-font = "assets/fonts/ter-v16n.psf"
-columns = 80
-rows = 25
+font = "assets/fonts/default8x16.psf"
+# columns = 80
+# rows = 25
+foreground = { r = 170, g = 170, b = 170 }
+background = { r = 0, g = 0, b = 0 }
