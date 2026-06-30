@@ -13,6 +13,7 @@ path = "src/kernel.rs"
 
 [dependencies]
 rinasys-config-schema = { path = "../crates/config-schema" }
+limine = "0.x"
 
 [build-dependencies]
 rinasys-config-codegen = { path = "../crates/config-codegen" }
