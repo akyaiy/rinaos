@@ -2,6 +2,7 @@
 #![no_main]
 
 mod boot;
+mod config;
 mod drivers;
 mod krnl;
 mod sync;
