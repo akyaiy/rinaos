@@ -18,9 +18,7 @@ pub fn generate_kernel_config(
     let config: KernelConfig<EmbeddedFilePath> = toml::from_str(&raw)
         .map_err(|error| format!("failed to parse {}: {error}", config_path.display()))?;
 
-    let font_path = context.absolutize(&config.tty.font.path);
-    println!("cargo:rerun-if-changed={}", font_path.display());
-
+    config.emit_rerun_if_changed(&context);
     config.emit_cfgs(&context, &mut Vec::new());
 
     let config_tokens = config.emit_config(&context);

@@ -19,7 +19,7 @@ pub use rinasys_config_derive::ConfigEmit;
 #[cfg_attr(feature = "codegen", derive(ConfigEmit))]
 pub struct KernelConfig<File> {
     pub serial: SerialConfig,
-    pub tty: TtyConfig<File>,
+    pub framebuffer: FramebufferConfig<File>,
 }
 
 #[derive(Debug, Clone)]
@@ -27,15 +27,12 @@ pub struct KernelConfig<File> {
 #[cfg_attr(feature = "codegen", derive(ConfigEmit))]
 pub struct SerialConfig {
     pub enabled: bool,
-    pub port: u16,
-    pub baud: u32,
-    pub irq: u8,
 }
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 #[cfg_attr(feature = "codegen", derive(ConfigEmit))]
-pub struct TtyConfig<File> {
+pub struct FramebufferConfig<File> {
     pub font: File,
     pub columns: usize,
     pub rows: usize,
@@ -97,6 +94,8 @@ pub trait ConfigEmit {
     fn emit_config(&self, context: &EmitContext) -> proc_macro2::TokenStream;
 
     fn emit_cfgs(&self, _context: &EmitContext, _path: &mut std::vec::Vec<&'static str>) {}
+
+    fn emit_rerun_if_changed(&self, _context: &EmitContext) {}
 }
 
 #[cfg(feature = "codegen")]
@@ -145,5 +144,10 @@ impl ConfigEmit for EmbeddedFilePath {
                 bytes: include_bytes!(#path),
             }
         }
+    }
+
+    fn emit_rerun_if_changed(&self, context: &EmitContext) {
+        let path = context.absolutize(&self.path);
+        std::println!("cargo:rerun-if-changed={}", path.display());
     }
 }
