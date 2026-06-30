@@ -19,7 +19,7 @@ pub use rinasys_config_derive::ConfigEmit;
 #[cfg_attr(feature = "codegen", derive(ConfigEmit))]
 pub struct KernelConfig<File> {
     pub serial: SerialConfig,
-    
+
     pub framebuffer: FramebufferConfig<File>,
 }
 
@@ -36,15 +36,15 @@ pub struct SerialConfig {
 #[cfg_attr(feature = "codegen", derive(ConfigEmit))]
 pub struct FramebufferConfig<File> {
     pub font: File,
-    
+
     #[cfg_attr(feature = "serde", serde(default))]
     pub columns: usize,
-    
+
     #[cfg_attr(feature = "serde", serde(default))]
     pub rows: usize,
-    
+
     pub foreground: FramebufferColorConfig,
-    
+
     pub background: FramebufferColorConfig,
 }
 

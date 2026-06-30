@@ -3,12 +3,13 @@
 #![feature(abi_x86_interrupt)]
 #![allow(dead_code)]
 
+mod arch;
 mod boot;
 mod config;
 mod drivers;
 mod krnl;
+mod mm;
 mod sync;
-mod arch;
 
 use core::panic::PanicInfo;
 

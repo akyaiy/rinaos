@@ -3,7 +3,8 @@ use crate::boot::BootInfo;
 use crate::drivers::console;
 use crate::drivers::framebuffer;
 use crate::drivers::serial;
-use crate::{klog_info, klog_debug, klog_error};
+use crate::mm;
+use crate::{klog_debug, klog_error, klog_info};
 use x86_64;
 
 pub mod klog;
@@ -27,10 +28,12 @@ pub fn init(boot_info: BootInfo) -> ! {
     klog_debug!("console initialized");
     klog_debug!("flushing klog");
     console::flush_klog();
+    mm::init(&boot_info);
+    klog_debug!("memory manager initialized");
     arch::init(&boot_info);
     klog_debug!("main subsystems initialized");
     x86_64::instructions::interrupts::enable();
-    klog_debug!("interrupts enabled");    
+    klog_debug!("interrupts enabled");
 
     klog_info!("halting kernel proccess");
     halt()
