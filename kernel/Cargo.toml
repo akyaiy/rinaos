@@ -14,6 +14,9 @@ path = "src/kmain.rs"
 [dependencies]
 rinasys-config-schema = { path = "../crates/config-schema" }
 limine = "0.x"
+x86_64 = "0.15.4"
+spin = "0.9"
+lazy_static = { version = "1.5", features = ["spin_no_std"] }
 
 [build-dependencies]
 rinasys-config-codegen = { path = "../crates/config-codegen" }
