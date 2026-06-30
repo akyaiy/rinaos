@@ -51,6 +51,14 @@ impl PhysAddr {
 }
 
 impl PhysFrame {
+    pub const fn from_start_address(addr: PhysAddr) -> Option<Self> {
+        if addr.0 & (PAGE_SIZE - 1) == 0 {
+            Some(Self { start: addr })
+        } else {
+            None
+        }
+    }
+
     pub const fn containing_address(addr: PhysAddr) -> Self {
         Self {
             start: PhysAddr(addr.0 & !(PAGE_SIZE - 1)),

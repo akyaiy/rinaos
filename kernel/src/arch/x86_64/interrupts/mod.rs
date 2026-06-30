@@ -18,6 +18,7 @@ const BACKEND_NONE: u8 = 0;
 const BACKEND_PIC: u8 = 1;
 const BACKEND_APIC: u8 = 2;
 const PIC_TIMER_HZ: u32 = 1_000;
+const APIC_CALIBRATION_MS: u64 = 10;
 const LOCAL_TIMER_PERIOD_MS: u32 = 10;
 const NS_PER_MS: u64 = 1_000_000;
 
@@ -106,6 +107,8 @@ unsafe fn init_apic(boot_info: &BootInfo) -> bool {
         Some(ticks_per_ms) => {
             lapic::start_periodic_timer(LOCAL_TIMER_PERIOD_MS);
             time::set_local_timer_period_ns(LOCAL_TIMER_PERIOD_MS as u64 * NS_PER_MS);
+            time::tick_ns(APIC_CALIBRATION_MS * NS_PER_MS);
+            BACKEND.store(BACKEND_APIC, Ordering::Release);
             crate::klog_info!(
                 "interrupts: using APIC, lapic timer {} ticks/ms, period {} ms",
                 ticks_per_ms,

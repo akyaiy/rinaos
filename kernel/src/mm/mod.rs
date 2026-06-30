@@ -1,10 +1,12 @@
 mod buddy;
+pub mod heap;
+pub mod paging;
 
 use crate::boot::BootInfo;
 use crate::sync::spinlock::SpinLock;
 use crate::{klog_debug, klog_info};
 
-pub use buddy::{BuddyStats, PhysFrame};
+pub use buddy::{BuddyStats, PhysAddr, PhysFrame};
 
 pub const PAGE_SIZE: u64 = buddy::PAGE_SIZE;
 
@@ -20,7 +22,7 @@ pub fn init(boot_info: &BootInfo) {
 
     let stats = allocator.stats();
     klog_info!(
-        "memory: initialized physical buddy allocator, {} KiB free in {} frames",
+        "memory: physical usable {} KiB in {} frames",
         stats.free_bytes / 1024,
         stats.free_frames
     );
@@ -28,6 +30,22 @@ pub fn init(boot_info: &BootInfo) {
         "memory: largest free order {}, usable regions {}",
         stats.largest_free_order,
         stats.usable_regions
+    );
+
+    paging::init(boot_info.hhdm_offset);
+    klog_debug!("memory: paging helpers initialized");
+
+    klog_debug!("memory: initializing kernel heap");
+    heap::init();
+    let heap_stats = heap::stats();
+    klog_info!(
+        "memory: heap reserved {} KiB virtual at {:#x}",
+        heap::KERNEL_HEAP_SIZE / 1024,
+        heap::KERNEL_HEAP_START,
+    );
+    klog_info!(
+        "memory: heap mapped {} KiB physical",
+        heap_stats.mapped_bytes / 1024
     );
 }
 

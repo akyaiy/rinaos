@@ -28,13 +28,12 @@ pub fn init(boot_info: BootInfo) -> ! {
     klog_debug!("console initialized");
     klog_debug!("flushing klog");
     console::flush_klog();
+    arch::init(&boot_info);
     mm::init(&boot_info);
     klog_debug!("memory manager initialized");
-    arch::init(&boot_info);
     klog_debug!("main subsystems initialized");
     x86_64::instructions::interrupts::enable();
     klog_debug!("interrupts enabled");
-
     klog_info!("halting kernel proccess");
     halt()
 }

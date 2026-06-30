@@ -1,7 +1,10 @@
 #![no_std]
 #![no_main]
 #![feature(abi_x86_interrupt)]
+#![feature(alloc_error_handler)]
 #![allow(dead_code)]
+
+extern crate alloc;
 
 mod arch;
 mod boot;
